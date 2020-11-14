@@ -127,3 +127,7 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Obfuscation
+obfs.txt
+course.html.*

@@ -4,105 +4,93 @@ import os
 from ftplib import FTP
 from tempfile import TemporaryDirectory
 from hashlib import sha256
-from tkinter import ttk
-import tkinter
+import re
 
-TARGET_PAGE: str = "https://ASD.co.il/course.html"
-TARGET_FTP: str = "ftp://ASD.co.il/"
-ENCRYPTED_PASSWORD: bytes = b'C]]GS_\x04\n_@\\_@\\_'
+from course_valve.valve_defs import (TARGET_FTP, ENCRYPTED_PASSWORD, TARGET_FILE_NAME,
+    IDENTIFIER, FTP_USER, OPEN_TEMPLATE_NAME, CLOSED_TEMPLATE_NAME)
 
 
-#
-#  Core
-#
 
+class PageUpdater:
+    def __init__(self, page_address: str) -> None:
+        self._work_dir = os.path.abspath(os.path.dirname(__file__))
+        if not all([os.path.exists(os.path.join(self._work_dir, e))
+                    for e in [OPEN_TEMPLATE_NAME, CLOSED_TEMPLATE_NAME]]):
+            raise EnvironmentError("ERROR: PageUpdater::__init__ : Missing essential template files")
+        self._backup_path = os.path.join(self._work_dir, f"{TARGET_FILE_NAME}.bkp")
+        if os.path.exists(self._backup_path):
+            os.remove(self._backup_path)
+        self._page_content = self._read_html(page_address)
+        self._save_backup()
+        self._date_pattern = re.compile(r'(\d+\.\d+\.\d+)')
 
-def get_backup_path() -> str:
-    return os.path.join(os.path.dirname(__file__), "course.html.bkp")
+    def restore_from_backup(self, password: str) -> bool:
+        if self.is_backup_exists():
+            with open(self._backup_path, "r") as f:
+                backup_content = f.read().decode("utf-8")
+                return self._upload_content_aux(backup_content, FTP_USER, password)
+        return False
 
+    def is_backup_exists(self) -> bool:
+        return os.path.exists(self._backup_path)
 
-def save_backup(page_content: str) -> None:
-    with open(get_backup_path(), "w") as f:
-        f.write(page_content)
+    def open_course(self, new_date: str, password: str) -> bool:
+        orig_text_begin_idx, orig_text_end_idx = get_begin_end_for_edit_text( self._page_content)
+        new_sentence = self._replace_date(self._page_content[orig_text_end_idx:orig_text_end_idx],
+                                          new_date)
+        new_page_content = self._insert_new_course_text(new_sentence)
+        return self._upload_content_aux(new_page_content, FTP_USER, password)
 
+    def close_course(self, password: str) -> bool:
+        with open(os.path.join(self._work_dir, CLOSED_TEMPLATE_NAME), "r") as f:
+            closed_content = f.read().decode("utf-8")
+        return self._upload_content_aux(closed_content, FTP_USER, password)
 
-def read_html(page_address: str) -> str:
-    with urlopen(page_address) as f:
-        return f.read().decode("utf-8")
+    def _save_backup(self) -> None:
+        with open(self._backup_path, "w", encoding='utf-8') as f:
+            f.write(self._page_content)
 
+    def _read_html(self, page_address: str) -> str:
+        with urlopen(page_address) as f:
+            return f.read().decode("utf-8")
 
-def get_begin_end_for_edit_text(page_content: str) -> Tuple[int, int]:
-    div_id_idx = page_content.index("course-terms-reveal")
-    orig_text_begin_idx = div_id_idx + page_content[div_id_idx:].index(">")
-    orig_text_end_idx = orig_text_begin_idx + page_content[orig_text_begin_idx:].index("</")
-    return orig_text_begin_idx, orig_text_end_idx
+    def _replace_date(self, orig_sentence: str, new_date: str) -> str:
+        if re.match(self._date_pattern, new_date) is None:
+            raise ValueError("ERROR: PageUpdate::_replace_date : new_date is not in the right format")
+        orig_date = re.search(self._date_pattern, orig_sentence).group(1)
+        return orig_sentence.replace(orig_date, new_date)
 
+    def _get_begin_end_for_edit_text(self) -> Tuple[int, int]:
+        div_id_idx = self._page_content.index(IDENTIFIER)
+        orig_text_begin_idx = div_id_idx +  self._page_content[div_id_idx:].index(">")
+        orig_text_end_idx = orig_text_begin_idx +  self._page_content[orig_text_begin_idx:].index("</")
+        return orig_text_begin_idx, orig_text_end_idx
 
-def insert_new_course_text(page_content: str, text: str) -> str:
-    orig_text_begin_idx, orig_text_end_idx = get_begin_end_for_edit_text(page_content)
-    return f"{page_content[:orig_text_begin_idx + 1]}{text}{page_content[orig_text_end_idx:]}"
+    def _insert_new_course_text(self, text: str) -> str:
+        orig_text_begin_idx, orig_text_end_idx = get_begin_end_for_edit_text( self._page_content)
+        return f"{self._page_content[:orig_text_begin_idx + 1]}{text}{self._page_content[orig_text_end_idx:]}"
 
+    def _upload_content_aux(self, page_content: str, user: str, password: str) -> bool:
+        file_name = TARGET_FILE_NAME
+        ftp_password = PageUpdater._decrypt_password(password, ENCRYPTED_PASSWORD)
+        with FTP(TARGET_FTP, user, ftp_password) as ftp, TemporaryDirectory() as dirpath:
+            content_path = os.path.join(dirpath, file_name)
+            with open(content_path, "w", encoding="utf-8") as f:
+                f.write(page_content)
+            temp_orig_file_name = file_name + ".orig.bkp"
+            ftp.rename(file_name, temp_orig_file_name)
+            try:
+                with open(content_path, "rb") as f:
+                    ftp.storbinary(f"STOR {file_name}", f)
+                ftp.delete(temp_orig_file_name)
+            except Exception as e:
+                print(f"Error during FTP upload: {e}")
+                ftp.rename(temp_orig_file_name, file_name)
+                return False
+        return True
 
-def upload_content(page_content: str, user: str, password: str) -> bool:
-    file_name = "course.html"
-    with FTP(TARGET_FTP, user, password) as ftp, TemporaryDirectory() as dirpath:
-        content_path = os.path.join(dirpath, file_name)
-        with open(content_path, "w") as f:
-            f.write(page_content)
-        temp_orig_file_name = file_name + ".orig.bkp"
-        ftp.rename(file_name, temp_orig_file_name)
-        try:
-            with open(content_path, "rb") as f:
-                ftp.storbinary(f"STOR {file_name}", f)
-            ftp.delete(temp_orig_file_name)
-        except Exception as e:
-            print(f"Error during FTP upload: {e}")
-            ftp.rename(temp_orig_file_name, file_name)
-            return False
-    return True
+    @staticmethod
+    def _decrypt_password(key_pass: str, encrypted_pass: bytes) -> str:
+        key_pass_bytes = sha256(key_pass.encode('utf-8')).hexdigest()[:len(encrypted_pass)].encode('utf-8')
+        return bytes(x ^ y for x, y in zip(key_pass_bytes, encrypted_pass)).decode('utf-8')
 
-
-def decrypt_password(key_pass: str, encrypted_pass: bytes) -> str:
-    # gen hardocded pass by `bytes(x ^ y for x, y in zip('SAMELEN1'.encode('utf-8'), 'SAMELEN2'.encode('utf-8'))`)
-    key_pass_bytes = sha256(key_pass.encode('utf-8')).hexdigest()[:len(encrypted_pass)].encode('utf-8')
-    return bytes(x ^ y for x, y in zip(key_pass_bytes, encrypted_pass)).decode('utf-8')
-
-
-#
-#  GUI
-#
-
-def assemble_new_date_message(page_content: str, new_date: str) -> bool:
-    orig_text_begin_idx, orig_text_end_idx = get_begin_end_for_edit_text() # TODO cnt
-
-
-def execute_new_date_open_course(new_date: str) -> bool:
-    page_content = read_html(TARGET_PAGE)
-    save_backup(page_content)
-    new_page_content = insert_new_course_text() # TODO cnt
-
-
-def run_gui() -> None:
-    window = tkinter.Tk()
-    window.title("Course Valve")
-    tkinter.Label(window, text="Username").grid(row=0)  # 'username' is placed on position 00 (row - 0 and column - 0)
-
-    # 'Entry' class is used to display the input-field for 'username' text label
-    tkinter.Entry(window).grid(row=0, column=1)  # first input-field is placed on position 01 (row - 0 and column - 1)
-
-    tkinter.Label(window, text="Password").grid(row=1)  # 'password' is placed on position 10 (row - 1 and column - 0)
-
-    tkinter.Entry(window).grid(row=1, column=1)  # second input-field is placed on position 11 (row - 1 and column - 1)
-
-    # 'Checkbutton' class is for creating a checkbutton which will take a 'columnspan' of width two (covers two columns)
-    tkinter.Checkbutton(window, text="Keep Me Logged In").grid(columnspan=2)
-
-    # def test():
-    #     tkinter.Label(window, text="GUI with Tkinter!").pack()
-    tkinter.ttk.Button(window, text="Click Me!", command=None).grid(row=3, column=1)
-    # TODO cnt
-    window.mainloop()
-
-
-if __name__ == '__main__':
-    run_gui()
