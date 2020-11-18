@@ -34,7 +34,15 @@ class PopupWindow:
         # self.top.geometry("360x250")
         if add_calendar:
             now = datetime.now()
-            self._dynamic_value = tkinter.StringVar()
+            self._date_str_frame = tkinter.Frame(self.top)
+            self._dynamic_value = tkinter.StringVar(
+                self._date_str_frame,
+                tkcalendar.Calendar.date.today().strftime("%d.%m.%Y"),
+            )
+            self._date_label = tkinter.Label(
+                self._date_str_frame, textvariable=self._dynamic_value
+            )
+            self._date_label.pack(pady=10, padx=30)
             self._cal = tkcalendar.Calendar(
                 self.top,
                 selectmode="day",
@@ -50,11 +58,10 @@ class PopupWindow:
                 day=now.day,
             )
             self._cal.pack(pady=20, fill="both", expand=True, padx=10)
-            self._date_label = tkinter.Label(self.top, textvariable=self._dynamic_value)
-            self._date_label.pack(pady=10, padx=30)
             self._dynamic_value.set(
                 f"Selected: {self._cal.selection_get().strftime('%d.%m.%Y')}"
             )
+            self._date_str_frame.pack()
 
         self._label = tkinter.Label(self.top, text=text)
         # self._label.grid(row=0, column=0, padx=30)
@@ -148,7 +155,7 @@ class MainWindow:
         else:
             status = True
         text = (
-            "ʕ •ᴥ•ʔ   Success!"
+            "ʕ•ᴥ•ʔ   Success!"
             if status
             else "(⊙︿⊙)   Failed!!! please contact Ron for assistance."
         )

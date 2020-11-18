@@ -47,9 +47,7 @@ class PageUpdater:
         return os.path.exists(self._backup_path)
 
     def open_course(self, new_date: str, password: str) -> bool:
-        orig_text_begin_idx, orig_text_end_idx = self.get_begin_end_for_edit_text(
-            self._page_content
-        )
+        orig_text_begin_idx, orig_text_end_idx = self._get_begin_end_for_edit_text()
         new_sentence = self._replace_date(
             self._page_content[orig_text_end_idx:orig_text_end_idx], new_date
         )
@@ -88,9 +86,7 @@ class PageUpdater:
         return orig_text_begin_idx, orig_text_end_idx
 
     def _insert_new_course_text(self, text: str) -> str:
-        orig_text_begin_idx, orig_text_end_idx = self.get_begin_end_for_edit_text(
-            self._page_content
-        )
+        orig_text_begin_idx, orig_text_end_idx = self._get_begin_end_for_edit_text()
         return f"{self._page_content[:orig_text_begin_idx + 1]}{text}{self._page_content[orig_text_end_idx:]}"
 
     @staticmethod
