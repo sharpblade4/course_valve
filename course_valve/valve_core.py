@@ -26,9 +26,9 @@ class PageUpdater:
                 for e in [OPEN_TEMPLATE_NAME, CLOSED_TEMPLATE_NAME]
             ]
         ):
-            raise EnvironmentError(
-                "ERROR: PageUpdater::__init__ : Missing essential template files"
-            )
+            pass  # raise EnvironmentError(
+            #    "ERROR: PageUpdater::__init__ : Missing essential template files"
+            # )
         self._backup_path = os.path.join(self._work_dir, f"{TARGET_FILE_NAME}.bkp")
         if os.path.exists(self._backup_path):
             os.remove(self._backup_path)
@@ -38,8 +38,8 @@ class PageUpdater:
 
     def restore_from_backup(self, password: str) -> bool:
         if self.is_backup_exists():
-            with open(self._backup_path, "r") as f:
-                backup_content = f.read().decode("utf-8")
+            with open(self._backup_path, "r", encoding="utf-8") as f:
+                backup_content = f.read()
                 return self._upload_content_aux(backup_content, FTP_USER, password)
         return False
 
@@ -47,7 +47,7 @@ class PageUpdater:
         return os.path.exists(self._backup_path)
 
     def open_course(self, new_date: str, password: str) -> bool:
-        orig_text_begin_idx, orig_text_end_idx = get_begin_end_for_edit_text(
+        orig_text_begin_idx, orig_text_end_idx = self.get_begin_end_for_edit_text(
             self._page_content
         )
         new_sentence = self._replace_date(
@@ -57,8 +57,10 @@ class PageUpdater:
         return self._upload_content_aux(new_page_content, FTP_USER, password)
 
     def close_course(self, password: str) -> bool:
-        with open(os.path.join(self._work_dir, CLOSED_TEMPLATE_NAME), "r") as f:
-            closed_content = f.read().decode("utf-8")
+        with open(
+            os.path.join(self._work_dir, CLOSED_TEMPLATE_NAME), "r", encoding="utf-8"
+        ) as f:
+            closed_content = f.read()
         return self._upload_content_aux(closed_content, FTP_USER, password)
 
     def _save_backup(self) -> None:
@@ -66,8 +68,8 @@ class PageUpdater:
             f.write(self._page_content)
 
     def _read_html(self, page_address: str) -> str:
-        with urlopen(page_address) as f:
-            return f.read().decode("utf-8")
+        with urlopen(page_address) as webpage:
+            return webpage.read().decode("utf-8")
 
     def _replace_date(self, orig_sentence: str, new_date: str) -> str:
         if re.match(self._date_pattern, new_date) is None:
@@ -86,12 +88,13 @@ class PageUpdater:
         return orig_text_begin_idx, orig_text_end_idx
 
     def _insert_new_course_text(self, text: str) -> str:
-        orig_text_begin_idx, orig_text_end_idx = get_begin_end_for_edit_text(
+        orig_text_begin_idx, orig_text_end_idx = self.get_begin_end_for_edit_text(
             self._page_content
         )
         return f"{self._page_content[:orig_text_begin_idx + 1]}{text}{self._page_content[orig_text_end_idx:]}"
 
-    def _upload_content_aux(self, page_content: str, user: str, password: str) -> bool:
+    @staticmethod
+    def _upload_content_aux(page_content: str, user: str, password: str) -> bool:
         file_name = TARGET_FILE_NAME
         ftp_password = PageUpdater._decrypt_password(password, ENCRYPTED_PASSWORD)
         with FTP(
