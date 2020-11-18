@@ -31,7 +31,6 @@ class PopupWindow:
         self.date_value = ""
         self.top = tkinter.Toplevel(primary)
         self.top.resizable(0, 0)
-        # self.top.geometry("360x250")
         if add_calendar:
             now = datetime.now()
             self._date_str_frame = tkinter.Frame(self.top)
@@ -50,8 +49,9 @@ class PopupWindow:
                 mindate=now,
                 maxdate=now + timedelta(90),
                 showweeknumbers=False,
-                datepattern="dd.mm.yy",
+                date_pattern="dd.mm.yyyy",
                 selectbackground="blue",
+                weekendbackground ="white",
                 textvariable=self._dynamic_value,
                 year=now.year,
                 month=now.month,
@@ -59,19 +59,16 @@ class PopupWindow:
             )
             self._cal.pack(pady=20, fill="both", expand=True, padx=10)
             self._dynamic_value.set(
-                f"Selected: {self._cal.selection_get().strftime('%d.%m.%Y')}"
+                f"{self._cal.selection_get().strftime('%d.%m.%Y')}"
             )
             self._date_str_frame.pack()
 
         self._label = tkinter.Label(self.top, text=text)
-        # self._label.grid(row=0, column=0, padx=30)
         self._label.pack(pady=20, padx=30)
         if not is_information:
-            self._entry = tkinter.Entry(self.top)
-            # self._entry.grid(row=1, column=0, padx=40)
+            self._entry = tkinter.Entry(self.top, show="*")
             self._entry.pack(pady=20, padx=40)
         self._button = tkinter.ttk.Button(self.top, text="OK", command=self._cleanup)
-        # self._button.grid(row=2, column=0)
         self._button.pack(pady=20, padx=40)
 
     def _cleanup(self) -> None:
@@ -105,7 +102,7 @@ class MainWindow:
             primary,
             text="Restore",
             command=lambda: self._popup(
-                "Restoring from backup. Enter password:",
+                "Restoring from backup.\nEnter password:",
                 is_information=False,
                 func=ValveFunc.RESTORE,
             ),
@@ -117,7 +114,7 @@ class MainWindow:
             primary,
             text="Open Registration",
             command=lambda: self._popup(
-                "Opening course registration. Select date above and enter password:",
+                "Opening course registration.\nSelect date above and enter password:",
                 is_information=False,
                 func=ValveFunc.OPEN,
             ),
@@ -129,7 +126,7 @@ class MainWindow:
             primary,
             text="Close Registration",
             command=lambda: self._popup(
-                "Closing course registration. Enter password:",
+                "Closing course registration.\nEnter password:",
                 is_information=False,
                 func=ValveFunc.CLOSE,
             ),
@@ -143,23 +140,24 @@ class MainWindow:
         should_pick_date = func is not None and func == ValveFunc.OPEN
         self._show_popup_aux(text, is_information, should_pick_date)
         status = False
-        if func is not None:
+        if func is not None and len(self._pop_window.password_value) > 0:
             if func == ValveFunc.RESTORE:
                 status = self._pu.restore_from_backup(self._pop_window.password_value)
             elif func == ValveFunc.CLOSE:
                 status = self._pu.close_course(self._pop_window.password_value)
-            elif func == ValveFunc.OPEN:
+            elif func == ValveFunc.OPEN and len(self._pop_window.date_value) > 0:
                 status = self._pu.open_course(
                     self._pop_window.date_value, self._pop_window.password_value
                 )
         else:
             status = True
-        text = (
-            "ʕ•ᴥ•ʔ   Success!"
-            if status
-            else "(⊙︿⊙)   Failed!!! please contact Ron for assistance."
-        )
-        self._show_popup_aux(text, is_information=True, add_calendar=False)
+        if not is_information:
+            text = (
+                "ʕ•ᴥ•ʔ   Success!"
+                if status
+                else "(⊙︿⊙)   Failed!!! please contact Ron for assistance."
+            )
+            self._show_popup_aux(text, is_information=True, add_calendar=False)
 
     def _show_popup_aux(
         self, text: str, is_information: bool, add_calendar: bool
@@ -168,8 +166,10 @@ class MainWindow:
             self._primary, text, is_information, add_calendar
         )
         self._button1["state"] = "disabled"
+        self._button2["state"] = "disabled"
+        self._button3["state"] = "disabled"
         self._primary.wait_window(self._pop_window.top)
-        self._button1["state"] = "normal"
+        self._button1["state"] = "normal" # only restore allowed after performing an action.
 
 
 def run_gui() -> None:
