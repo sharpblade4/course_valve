@@ -27,9 +27,9 @@ class PageUpdater:
                 for e in [OPENED_TEMPLATE_NAME, CLOSED_TEMPLATE_NAME]
             ]
         ):
-            pass  # raise EnvironmentError(
-            #    "ERROR: PageUpdater::__init__ : Missing essential template files"
-            # )
+            raise EnvironmentError(
+               "ERROR: PageUpdater::__init__ : Missing essential template files"
+            )
         self._backup_path = os.path.join(self._work_dir, f"{TARGET_FILE_NAME}.bkp")
         if os.path.exists(self._backup_path):
             os.remove(self._backup_path)
@@ -85,7 +85,6 @@ class PageUpdater:
             raise ValueError(
                 "ERROR: PageUpdate::_replace_date : new_date is not in the right format"
             )
-        print('#@#@#', orig_sentence)
         orig_date = re.search(self._date_pattern, orig_sentence).group(1)
         return orig_sentence.replace(orig_date, new_date)
 
@@ -99,28 +98,32 @@ class PageUpdater:
 
     def _insert_new_course_text(self, text: str, page_content: str) -> str:
         orig_text_begin_idx, orig_text_end_idx = self._get_begin_end_for_edit_text(page_content)
-        return f"{page_content[:orig_text_begin_idx + 1]}{text}{page_content[orig_text_end_idx:]}"
+        return f"{page_content[:orig_text_begin_idx]}{text}{page_content[orig_text_end_idx:]}"
 
     @staticmethod
     def _upload_content_aux(page_content: str, user: str, password: str) -> bool:
-        file_name = TARGET_FILE_NAME
-        ftp_password = PageUpdater._decrypt_password(password, ENCRYPTED_PASSWORD)
-        with FTP(
-            TARGET_FTP, user, ftp_password
-        ) as ftp, TemporaryDirectory() as dirpath:
-            content_path = os.path.join(dirpath, file_name)
-            with open(content_path, "w", encoding="utf-8") as f:
-                f.write(page_content)
-            temp_orig_file_name = file_name + ".orig.bkp"
-            ftp.rename(file_name, temp_orig_file_name)
-            try:
-                with open(content_path, "rb") as f:
-                    ftp.storbinary(f"STOR {file_name}", f)
-                ftp.delete(temp_orig_file_name)
-            except Exception as e:
-                print(f"Error during FTP upload: {e}")
-                ftp.rename(temp_orig_file_name, file_name)
-                return False
+        try:
+            file_name = TARGET_FILE_NAME
+            ftp_password = PageUpdater._decrypt_password(password, ENCRYPTED_PASSWORD)
+            with FTP(
+                TARGET_FTP, user, ftp_password
+            ) as ftp, TemporaryDirectory() as dirpath:
+                content_path = os.path.join(dirpath, file_name)
+                with open(content_path, "w", encoding="utf-8") as f:
+                    f.write(page_content)
+                temp_orig_file_name = file_name + ".orig.bkp"
+                ftp.rename(file_name, temp_orig_file_name)
+                try:
+                    with open(content_path, "rb") as f:
+                        ftp.storbinary(f"STOR {file_name}", f)
+                    ftp.delete(temp_orig_file_name)
+                except Exception as e:
+                    print(f"ERROR: PageUpdater::_upload_content_aux: Error during FTP upload: {e}")
+                    ftp.rename(temp_orig_file_name, file_name)
+                    return False
+        except Exception as e2:
+            print(f"ERROR: PageUpdater::_upload_content_aux: Cannot connect to FTP: {e2}")
+            return False
         return True
 
     @staticmethod

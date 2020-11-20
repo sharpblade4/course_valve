@@ -1,0 +1,1 @@
+pyinstaller run.py -y -D -n CourseValve1 --add-data "course_valve\\*.html.*;course_valve" --add-data "course_valve\\*.png;course_valve" --add-data "course_valve\\*.txt;course_valve" --hidden-import PIL --hidden-import babel.numbers -i "course_valve\\icon.ico" --noconsole

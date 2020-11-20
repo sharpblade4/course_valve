@@ -2,6 +2,8 @@
 
 from typing import Optional
 import os
+import sys
+import webbrowser
 from enum import Enum, auto, unique
 from datetime import datetime, timedelta
 from PIL import Image, ImageTk
@@ -151,13 +153,16 @@ class MainWindow:
                 )
         else:
             status = True
+            return
         if not is_information:
             text = (
-                "ʕ•ᴥ•ʔ   Success!"
+                "ʕ•ᴥ•ʔ   Success!\nPress OK and verify that it looks good."
                 if status
-                else "(⊙︿⊙)   Failed!!! please contact Ron for assistance."
+                else "(⊙︿⊙)   Failed!!!\nPlease contact Ron for assistance."
             )
             self._show_popup_aux(text, is_information=True, add_calendar=False)
+            if status:
+                webbrowser.open_new(TARGET_PAGE)
 
     def _show_popup_aux(
         self, text: str, is_information: bool, add_calendar: bool
@@ -172,9 +177,8 @@ class MainWindow:
         self._button1["state"] = "normal" # only restore allowed after performing an action.
 
 
-def run_gui() -> None:
+def run_gui(work_dir: str) -> None:
     window = tkinter.Tk()
-    work_dir = os.path.abspath(os.path.dirname(__file__))
     img = ImageTk.PhotoImage(Image.open(os.path.join(work_dir, "icon.png")))
     window.geometry("320x380")
     window.title("Course Valve")
@@ -184,5 +188,16 @@ def run_gui() -> None:
     window.mainloop()
 
 
+def main() -> None:
+    work_dir = os.path.abspath(os.path.dirname(__file__))
+    orig_stdout = sys.stdout
+    f_logs = open(os.path.join(work_dir, "logs.txt"), "a")
+    sys.stdout = f_logs
+    run_gui(work_dir)
+    sys.stdout = orig_stdout
+    f_logs.close()
+
+
 if __name__ == "__main__":
-    run_gui()
+    main()
+
