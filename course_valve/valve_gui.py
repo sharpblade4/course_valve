@@ -135,6 +135,9 @@ class MainWindow:
             width=20,
         )
         self._button3.grid(row=5, column=0)
+        if (self._pu.course_closed_on_load):
+            self._button3["state"] = "disabled"
+        
 
     def _popup(
         self, text: str, is_information: bool, func: Optional[ValveFunc]

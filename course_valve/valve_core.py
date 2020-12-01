@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Pattern
 from urllib.request import urlopen
 import os
 from ftplib import FTP
@@ -15,28 +15,39 @@ from course_valve.valve_defs import (
     FTP_USER,
     OPENED_TEMPLATE_NAME,
     CLOSED_TEMPLATE_NAME,
+    TEMPLATES_TARGETS_PREFIX,
 )
 
 
 class PageUpdater:
+    _work_dir: str
+    _backup_path: str
+    _yes_path: str
+    _no_path: str
+    _page_content: str
+    _is_closed: bool
+    _date_pattern: Pattern
+    
     def __init__(self, page_address: str) -> None:
-        self._work_dir = os.path.abspath(os.path.dirname(__file__))
-        if not all(
-            [
-                os.path.exists(os.path.join(self._work_dir, e))
-                for e in [OPENED_TEMPLATE_NAME, CLOSED_TEMPLATE_NAME]
-            ]
-        ):
-            raise EnvironmentError(
-               "ERROR: PageUpdater::__init__ : Missing essential template files"
-            )
-        self._backup_path = os.path.join(self._work_dir, f"{TARGET_FILE_NAME}.bkp")
-        if os.path.exists(self._backup_path):
-            os.remove(self._backup_path)
+        self._init_work_dir()
+        self._date_pattern = re.compile(r"(\d+\.\d+\.\d+)")
         self._page_content = self._read_html(page_address)
         self._is_closed = NO_IDENTIFIER in self._page_content
-        self._save_backup(self._page_content)
-        self._date_pattern = re.compile(r"(\d+\.\d+\.\d+)")
+        self._save_backup_and_templates(self._page_content)
+
+    @property
+    def course_closed_on_load(self) -> bool:
+        return self._is_closed
+
+    def _init_work_dir(self) -> None:
+        self._work_dir = os.path.abspath(os.path.dirname(__file__))
+        self._backup_path = os.path.join(self._work_dir, f"{TARGET_FILE_NAME}.bkp")
+        self._yes_path = os.path.join(self._work_dir, OPENED_TEMPLATE_NAME)
+        self._no_path = os.path.join(self._work_dir, CLOSED_TEMPLATE_NAME)
+
+        for path in (self._backup_path, self._yes_path, self._no_path):
+            if os.path.exists(path):
+                os.remove(path)
 
     def restore_from_backup(self, password: str) -> bool:
         if self.is_backup_exists():
@@ -49,10 +60,8 @@ class PageUpdater:
         return os.path.exists(self._backup_path)
 
     def open_course(self, new_date: str, password: str) -> bool:
-        if self._is_closed:
-            with open(
-                os.path.join(self._work_dir, OPENED_TEMPLATE_NAME), "r", encoding="utf-8"
-            ) as f:
+        if self._is_closed and os.path.exists(self._yes_path):
+            with open(self._yes_path, "r", encoding="utf-8") as f:
                 page_content = f.read()
         else:
             page_content = self._page_content
@@ -64,17 +73,21 @@ class PageUpdater:
         return self._upload_content_aux(new_page_content, FTP_USER, password)
 
     def close_course(self, password: str) -> bool:
-        if self._is_closed:
+        if self._is_closed or not os.path.exists(self._no_path):
             return False
-        with open(
-            os.path.join(self._work_dir, CLOSED_TEMPLATE_NAME), "r", encoding="utf-8"
-        ) as f:
+        with open(self._no_path, "r", encoding="utf-8") as f:
             closed_content = f.read()
         return self._upload_content_aux(closed_content, FTP_USER, password)
 
-    def _save_backup(self, page_content: str) -> None:
+    def _save_backup_and_templates(self, page_content: str) -> None:
         with open(self._backup_path, "w", encoding="utf-8") as f:
             f.write(page_content)
+        no_template_content = self._read_html(TEMPLATES_TARGETS_PREFIX+".no")
+        with open(self._no_path, "w", encoding="utf-8") as f:
+            f.write(no_template_content)
+        yes_template_content = self._read_html(TEMPLATES_TARGETS_PREFIX+".yes")
+        with open(self._yes_path, "w", encoding="utf-8") as f:
+            f.write(yes_template_content)
 
     def _read_html(self, page_address: str) -> str:
         with urlopen(page_address) as webpage:
